@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"math"
 	"net/http"
@@ -10,8 +10,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"crawler/db"
+
 	"golang.org/x/net/html"
 )
+
+const DATABASE_URL = "postgres://localhost/search"
+const EMBEDDINGS_MAX = 300
 
 type Statistics struct {
 	mu sync.Mutex
@@ -21,43 +28,11 @@ type Statistics struct {
 	dropped int
 }
 
-type Queue[T any] struct {
-	mu sync.Mutex
-	items []T
-}
-
-func (q *Queue[T]) Enqueue(item T) {
-	q.mu.Lock()
-	q.items = append(q.items, item)
-	q.mu.Unlock()
-}
-
-func (q *Queue[T]) Dequeue() (T, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	var null T
-	if len(q.items) == 0 {
-		return null, errors.New("Queue empty")
-	}
-
-	item := q.items[0]
-	q.items = q.items[1:]
-
-	return item, nil
-}
-
-func (q *Queue[T]) Length() int {
-	q.mu.Lock()
-	length := len(q.items)
-	q.mu.Unlock()
-	return length
-}
-
 var done = make(map[string]bool)
 var doneMu sync.Mutex
-
 var stats Statistics = Statistics{}
+var conn *pgx.Conn
+var queries *db.Queries
 
 func getLinks(doc *html.Node) []string {
 	links := make([]string, 0)
@@ -81,7 +56,20 @@ func getLinks(doc *html.Node) []string {
 	return links
 }
 
-func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup, output *os.File) {
+func getContent(doc *html.Node) string {
+	var text strings.Builder
+	for node := doc.FirstChild; node != nil; node = node.NextSibling {
+		if node.Type == html.TextNode {
+			text.WriteString(node.Data)
+		} else {
+			text.WriteString(getContent(node))
+		}
+	}
+
+	return text.String()
+}
+
+func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 	defer wg.Done()
 	doneMu.Lock()
 
@@ -115,12 +103,21 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup, output *os.Fil
 		return
 	}
 
-	fmt.Fprintf(output, "%s\n", seed)
 	stats.mu.Lock()
 	stats.total += 1
 	stats.mu.Unlock()
 
 	links := getLinks(doc)
+	content := getContent(doc)
+
+	ctx := context.Background()
+	urlID, err := queries.AddURL(ctx, seed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to add URL %s to database: %v", seed, err)
+	}
+
+	embeddings_add(ctx, urlID, content)
+	tfidf_add_token_index(ctx, urlID, content)
 
 	for _, link := range links {
 		wg.Add(1)
@@ -141,14 +138,17 @@ func main() {
 		os.Exit(1)
 	}
 
-
-	output, err := os.Create("output.txt")
-
+	// conn, err := pgx.Connect(context.Background(), DATABASE_URL)
+	conn, err := pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create output file.\n")
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
 	}
+	defer conn.Close()
 
-	defer output.Close()
+	queries = db.New(conn)
+
+	embeddings_init()
 
 	queue := &Queue[string] { }
 
@@ -165,7 +165,7 @@ func main() {
 					break
 				}
 
-				crawl(url, queue, &wg, output)
+				crawl(url, queue, &wg)
 			}
 		}()
 	}
