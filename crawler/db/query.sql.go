@@ -35,6 +35,38 @@ func (q *Queries) AddCount(ctx context.Context, arg AddCountParams) (TfIdfCount,
 	return i, err
 }
 
+const addCountsBatch = `-- name: AddCountsBatch :many
+insert into tf_idf_counts (url_id, token_id, "count")
+select
+  x.url_id,
+  x.token_id,
+  x.count
+from unnest($1::tf_idf_counts[]) as x
+on conflict (url_id, token_id)
+do update set "count" = excluded."count"
+returning url_id, token_id, count
+`
+
+func (q *Queries) AddCountsBatch(ctx context.Context, dollar_1 []interface{}) ([]TfIdfCount, error) {
+	rows, err := q.db.Query(ctx, addCountsBatch, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TfIdfCount
+	for rows.Next() {
+		var i TfIdfCount
+		if err := rows.Scan(&i.UrlID, &i.TokenID, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const addToken = `-- name: AddToken :one
 insert into tf_idf_tokens (
 	token
@@ -53,19 +85,55 @@ func (q *Queries) AddToken(ctx context.Context, token string) (int64, error) {
 	return id, err
 }
 
+const addTokensBatch = `-- name: AddTokensBatch :many
+
+insert into tf_idf_tokens (token)
+select distinct x.token
+from unnest($1::text[]) as x(token)
+on conflict (token) do update
+set token = excluded.token
+returning id, token
+`
+
+// below was created with AI
+func (q *Queries) AddTokensBatch(ctx context.Context, dollar_1 []string) ([]TfIdfToken, error) {
+	rows, err := q.db.Query(ctx, addTokensBatch, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TfIdfToken
+	for rows.Next() {
+		var i TfIdfToken
+		if err := rows.Scan(&i.ID, &i.Token); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const addURL = `-- name: AddURL :one
 insert into urls (
-	url
+	url, title
 ) values (
-	$1
+	$1, $2
 ) on conflict (
 	url
 ) do update set url = urls.url
 returning id
 `
 
-func (q *Queries) AddURL(ctx context.Context, url string) (int64, error) {
-	row := q.db.QueryRow(ctx, addURL, url)
+type AddURLParams struct {
+	Url   string
+	Title string
+}
+
+func (q *Queries) AddURL(ctx context.Context, arg AddURLParams) (int64, error) {
+	row := q.db.QueryRow(ctx, addURL, arg.Url, arg.Title)
 	var id int64
 	err := row.Scan(&id)
 	return id, err

@@ -2,8 +2,19 @@ create extension vector;
 
 create table urls (
 	id bigserial primary key,
-	url text not null unique
+	url text not null unique,
+	title text not null
 );
+
+-- create table if not exists tf_idf_tokens_stage (
+-- 	token text not null
+-- );
+--
+-- create table if not exists tf_idf_counts_stage (
+-- 	url_id bigint not null,
+-- 	token text not null,
+-- 	"count" int not null
+-- );
 
 create table tf_idf_tokens (
 	id bigserial primary key,
@@ -28,5 +39,3 @@ create table vector_index (
 	url_id bigint not null references urls(id) on delete cascade,
 	embedding vector(300)
 );
-
-

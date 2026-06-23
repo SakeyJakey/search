@@ -8,9 +8,9 @@ returning *;
 
 -- name: AddURL :one
 insert into urls (
-	url
+	url, title
 ) values (
-	$1
+	$1, $2
 ) on conflict (
 	url
 ) do update set url = urls.url

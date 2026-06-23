@@ -31,8 +31,18 @@ func main() {
 	queries = db.New(conn)
 
 	ctx := context.Background()
+	
+	fmt.Printf("[0/4] [  ] Clearing TF-IDF table")
+	_, err = conn.Exec(ctx, "delete from tf_idf_index;")
+	if err != nil {
+		fmt.Printf("\r[1/4] [✘ ] Failed to clear TF-IDF table: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\r[0/4] [🗸 ] Cleared TF-IDF table\n")
 
 	fmt.Printf("[1/4] [  ] Counting documents")
+
 	documentCount, err := queries.GetDocumentCount(ctx)
 	if err != nil {
 		fmt.Printf("\r[1/4] [✘ ] Failed to count documents: %v\n", err)
@@ -97,4 +107,6 @@ func main() {
 	}
 	fmt.Printf("\r[3/4] [🗸 ] Computed TF-IDF\n")
 	fmt.Printf("[4/4] [🗸 ] Completed post-processing\n")
+
+
 }

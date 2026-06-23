@@ -26,8 +26,9 @@ type TfIdfToken struct {
 }
 
 type Url struct {
-	ID  int64
-	Url string
+	ID    int64
+	Url   string
+	Title string
 }
 
 type VectorIndex struct {

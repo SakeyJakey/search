@@ -6,13 +6,14 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5"
 	"crawler/db"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"golang.org/x/net/html"
 )
@@ -31,7 +32,7 @@ type Statistics struct {
 var done = make(map[string]bool)
 var doneMu sync.Mutex
 var stats Statistics = Statistics{}
-var conn *pgx.Conn
+var conn *pgxpool.Pool
 var queries *db.Queries
 
 func getLinks(doc *html.Node) []string {
@@ -67,6 +68,27 @@ func getContent(doc *html.Node) string {
 	}
 
 	return text.String()
+}
+
+func getTitle(doc *html.Node) string {
+	for node := doc.FirstChild; node != nil; node = node.NextSibling {
+		if node.Type == html.ElementNode {
+			if node.Data == "title" {
+				for child := node.FirstChild; child != nil; child = node.NextSibling {
+					if child.Type == html.TextNode {
+						return child.Data
+					}
+				}
+			} else {
+				title := getTitle(node)
+				if title != "" {
+					return title 
+				}
+			}
+		}
+	}
+
+	return "Untitled Page"
 }
 
 func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
@@ -109,9 +131,16 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 
 	links := getLinks(doc)
 	content := getContent(doc)
+	title := getTitle(doc)
 
-	ctx := context.Background()
-	urlID, err := queries.AddURL(ctx, seed)
+	ctx, cancel := context.WithTimeout(context.Background(), 15 * time.Second)
+	defer cancel()
+
+	urlID, err := queries.AddURL(ctx, db.AddURLParams {
+		Url: seed,
+		Title: title,
+	})
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to add URL %s to database: %v", seed, err)
 	}
@@ -123,23 +152,33 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 		wg.Add(1)
 		queue.Enqueue(link)
 	}
+
+	if err := ctx.Err(); err != nil {
+		queue.Enqueue(seed)
+		return
+	}
+
+	wg.Done()
 }
 
 func main() {
+	seedsPath := "seeds.txt"
+
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: go run crawler <seeds file>\n")
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "No seeds file found\n")
+		fmt.Printf("Defaulting to seeds.txt")
+	} else {
+		seedsPath = os.Args[1]
 	}
 
-	seedsFile, err := os.ReadFile(os.Args[1])
+	seedsFile, err := os.ReadFile(seedsPath)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Seeds file invalid.\n")
 		os.Exit(1)
 	}
 
-	// conn, err := pgx.Connect(context.Background(), DATABASE_URL)
-	conn, err := pgxpool.New(context.Background(), DATABASE_URL)
+	conn, err = pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
@@ -156,7 +195,7 @@ func main() {
 
 	seeds := strings.Split(string(seedsFile), "\n")
 
-	for range 10000 {
+	for range runtime.NumCPU() {
 		go func() {
 			for {
 				url, err := queue.Dequeue()
