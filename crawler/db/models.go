@@ -5,8 +5,21 @@
 package db
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pgvector/pgvector-go"
 )
+
+type ProcessedContent struct {
+	UrlID       int64
+	Content     string
+	ProcessedAt pgtype.Timestamptz
+}
+
+type RawContent struct {
+	UrlID     int64
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
 
 type TfIdfCount struct {
 	UrlID   int64

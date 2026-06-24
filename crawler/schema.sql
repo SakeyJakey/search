@@ -39,3 +39,15 @@ create table vector_index (
 	url_id bigint not null references urls(id) on delete cascade,
 	embedding vector(300)
 );
+
+create table raw_content (
+	url_id bigint primary key references urls(id) on delete cascade,
+	content text not null,
+	created_at timestamp with time zone default current_timestamp
+);
+
+create table processed_content (
+	url_id bigint primary key references urls(id) on delete cascade,
+	content text not null,
+	processed_at timestamp with time zone default current_timestamp
+);

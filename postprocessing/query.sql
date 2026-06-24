@@ -22,3 +22,22 @@ insert into tf_idf_index (
 ) values (
 	$1, $2, $3
 );
+
+-- name: GetUnprocessedRawContent :many
+select url_id, content
+from raw_content;
+
+-- name: MoveToProcessed :exec
+insert into processed_content (url_id, content)
+select r.url_id, r.content from raw_content r where r.url_id = $1;
+
+-- name: DeleteRawContent :exec
+delete from raw_content where url_id = $1;
+
+-- name: AddVector :one
+insert into vector_index (
+	url_id, embedding
+) values (
+	$1, $2
+)
+returning *;

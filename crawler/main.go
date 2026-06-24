@@ -133,7 +133,7 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 	content := getContent(doc)
 	title := getTitle(doc)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
 	defer cancel()
 
 	urlID, err := queries.AddURL(ctx, db.AddURLParams {
@@ -145,8 +145,13 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 		fmt.Fprintf(os.Stderr, "Failed to add URL %s to database: %v", seed, err)
 	}
 
-	embeddings_add(ctx, urlID, content)
-	tfidf_add_token_index(ctx, urlID, content)
+	err = queries.AddRawContent(ctx, db.AddRawContentParams{
+		UrlID: urlID,
+		Content: content,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to add raw content for URL %s to database: %v", seed, err)
+	}
 
 	for _, link := range links {
 		wg.Add(1)
@@ -186,8 +191,6 @@ func main() {
 	defer conn.Close()
 
 	queries = db.New(conn)
-
-	embeddings_init()
 
 	queue := &Queue[string] { }
 

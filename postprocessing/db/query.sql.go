@@ -7,7 +7,39 @@ package db
 
 import (
 	"context"
+
+	"github.com/pgvector/pgvector-go"
 )
+
+const addVector = `-- name: AddVector :one
+insert into vector_index (
+	url_id, embedding
+) values (
+	$1, $2
+)
+returning url_id, embedding
+`
+
+type AddVectorParams struct {
+	UrlID     int64
+	Embedding pgvector.Vector
+}
+
+func (q *Queries) AddVector(ctx context.Context, arg AddVectorParams) (VectorIndex, error) {
+	row := q.db.QueryRow(ctx, addVector, arg.UrlID, arg.Embedding)
+	var i VectorIndex
+	err := row.Scan(&i.UrlID, &i.Embedding)
+	return i, err
+}
+
+const deleteRawContent = `-- name: DeleteRawContent :exec
+delete from raw_content where url_id = $1
+`
+
+func (q *Queries) DeleteRawContent(ctx context.Context, urlID int64) error {
+	_, err := q.db.Exec(ctx, deleteRawContent, urlID)
+	return err
+}
 
 const getCountsForToken = `-- name: GetCountsForToken :many
 select url_id, "count"
@@ -90,6 +122,36 @@ func (q *Queries) GetTokenIDs(ctx context.Context) ([]int64, error) {
 	return items, nil
 }
 
+const getUnprocessedRawContent = `-- name: GetUnprocessedRawContent :many
+select url_id, content
+from raw_content
+`
+
+type GetUnprocessedRawContentRow struct {
+	UrlID   int64
+	Content string
+}
+
+func (q *Queries) GetUnprocessedRawContent(ctx context.Context) ([]GetUnprocessedRawContentRow, error) {
+	rows, err := q.db.Query(ctx, getUnprocessedRawContent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUnprocessedRawContentRow
+	for rows.Next() {
+		var i GetUnprocessedRawContentRow
+		if err := rows.Scan(&i.UrlID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertTfIdfBatch = `-- name: InsertTfIdfBatch :exec
 insert into tf_idf_index (
 	url_id, token_id, tf_idf
@@ -106,5 +168,15 @@ type InsertTfIdfBatchParams struct {
 
 func (q *Queries) InsertTfIdfBatch(ctx context.Context, arg InsertTfIdfBatchParams) error {
 	_, err := q.db.Exec(ctx, insertTfIdfBatch, arg.UrlID, arg.TokenID, arg.TfIdf)
+	return err
+}
+
+const moveToProcessed = `-- name: MoveToProcessed :exec
+insert into processed_content (url_id, content)
+select r.url_id, r.content from raw_content r where r.url_id = $1
+`
+
+func (q *Queries) MoveToProcessed(ctx context.Context, urlID int64) error {
+	_, err := q.db.Exec(ctx, moveToProcessed, urlID)
 	return err
 }

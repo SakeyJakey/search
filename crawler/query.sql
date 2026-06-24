@@ -35,3 +35,10 @@ insert into tf_idf_counts (
 	url_id, token_id
 ) do update set "count" = excluded."count"
 returning *;
+
+-- name: AddRawContent :exec
+insert into raw_content (
+	url_id, content
+) values (
+	$1, $2
+);

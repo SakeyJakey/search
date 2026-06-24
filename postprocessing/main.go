@@ -9,19 +9,19 @@ import (
 
 	"postprocessing/db"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const DATABASE_URL = "postgres://localhost/search"
 const EMBEDDINGS_MAX = 300
 
-var conn *pgx.Conn
+var conn *pgxpool.Pool
 var queries *db.Queries
 
 func main() {
 	// conn, err := pgx.Connect(context.Background(), DATABASE_URL)
-	conn, err := pgxpool.New(context.Background(), DATABASE_URL)
+	var err error
+	conn, err = pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
@@ -29,6 +29,9 @@ func main() {
 	defer conn.Close()
 
 	queries = db.New(conn)
+
+	process()
+	return
 
 	ctx := context.Background()
 	
@@ -107,6 +110,36 @@ func main() {
 	}
 	fmt.Printf("\r[3/4] [🗸 ] Computed TF-IDF\n")
 	fmt.Printf("[4/4] [🗸 ] Completed post-processing\n")
+}
 
+func process() {
+	ctx := context.Background()
+	// 1. Get raw content
+	rows, err := queries.GetUnprocessedRawContent(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get raw content: %v\n", err)
+		return
+	}
 
+	embeddings_init()
+
+	for _, row := range rows {
+		fmt.Printf("Processing URL ID: %d\n", row.UrlID)
+		// 2. Index
+		tfidf_add_token_index(ctx, row.UrlID, row.Content)
+		embeddings_add(ctx, row.UrlID, row.Content)
+
+		// 3. Move to processed
+		err = queries.MoveToProcessed(ctx, row.UrlID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to move to processed: %v\n", err)
+			continue
+		}
+
+		// 4. Delete from raw
+		err = queries.DeleteRawContent(ctx, row.UrlID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete from raw: %v\n", err)
+		}
+	}
 }
