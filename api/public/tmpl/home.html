@@ -1,0 +1,45 @@
+{{ define "home.html" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Search</title>
+	<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="home-page">
+	<div class="container">
+		<div class="hero">
+			<h1 class="logo">Seek</h1>
+			<p class="tagline">Find what matters</p>
+			
+			<form method="get" action="/search" class="search-form">
+				<div class="search-input-wrapper">
+					<input
+						type="text"
+						name="q"
+						class="search-input"
+						placeholder="Search the web..."
+						autocomplete="off"
+						required
+					>
+					<button type="submit" class="search-button" aria-label="Search">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="11" cy="11" r="8"></circle>
+							<path d="m21 21-4.35-4.35"></path>
+						</svg>
+					</button>
+				</div>
+			</form>
+
+			<div class="footer-home">
+				<a href="#about">About</a>
+				<a href="#privacy">Privacy</a>
+				<a href="#settings">Settings</a>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
+{{ end }}
+

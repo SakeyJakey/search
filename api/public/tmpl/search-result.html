@@ -1,0 +1,13 @@
+{{ define "search-result" }}
+<a href="{{ .URL }}" class="result-item" target="_blank" rel="noopener noreferrer">
+	<div class="result-header">
+		{{ if .Favicon }}
+			<img src="{{ .Favicon }}" alt="" class="result-favicon">
+		{{ end }}
+		<span class="result-url">{{ .URL }}</span>
+	</div>
+	<h3 class="result-title">{{ .Title }}</h3>
+	<p class="result-description">{{ .Description }}</p>
+</a>
+{{ end }}
+
