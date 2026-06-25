@@ -9,6 +9,14 @@ import (
 	"github.com/pgvector/pgvector-go"
 )
 
+type EvaluationResult struct {
+	ID         int64
+	Query      string
+	SearchType string
+	Score      int32
+	CreatedAt  pgtype.Timestamptz
+}
+
 type ProcessedContent struct {
 	UrlID       int64
 	Content     string

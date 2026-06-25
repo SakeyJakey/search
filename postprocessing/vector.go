@@ -66,7 +66,14 @@ func vecFill(val float64, size int) []float64 {
 }
 
 func vecNorm(vec []float64) []float64 {
-	return vecDiv(vec, vecFill(vecSum(vec), EMBEDDINGS_MAX));
+	mag := vecMag(vec)
+	if mag == 0 {
+		return vec
+	}
+	for i := range vec {
+		vec[i] /= mag
+	}
+	return vec
 }
 
 func vec32(orig[]float64) []float32 {

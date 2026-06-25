@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math"
 	"os"
-	"strconv"
+	"runtime"
+	"sync"
 
 	"postprocessing/db"
 
@@ -17,8 +19,12 @@ const EMBEDDINGS_MAX = 300
 
 var conn *pgxpool.Pool
 var queries *db.Queries
+var tfidfOnly bool
 
 func main() {
+	flag.BoolVar(&tfidfOnly, "tfidf-only", false, "Only process TF-IDF indices, skip vector embeddings")
+	flag.Parse()
+
 	// conn, err := pgx.Connect(context.Background(), DATABASE_URL)
 	var err error
 	conn, err = pgxpool.New(context.Background(), DATABASE_URL)
@@ -30,21 +36,22 @@ func main() {
 
 	queries = db.New(conn)
 
-	process()
-	return
-
 	ctx := context.Background()
 	
-	fmt.Printf("[0/4] [  ] Clearing TF-IDF table")
-	_, err = conn.Exec(ctx, "delete from tf_idf_index;")
+	fmt.Printf("[0/4] [  ] Clearing indices")
+	query := "TRUNCATE TABLE tf_idf_index, tf_idf_counts RESTART IDENTITY CASCADE;"
+	if !tfidfOnly {
+		query = "TRUNCATE TABLE tf_idf_index, tf_idf_counts, vector_index RESTART IDENTITY CASCADE;"
+	}
+	_, err = conn.Exec(ctx, query)
 	if err != nil {
-		fmt.Printf("\r[1/4] [✘ ] Failed to clear TF-IDF table: %v\n", err)
+		fmt.Printf("\r[0/4] [✘ ] Failed to clear tables: %v\n", err)
 		return
 	}
 
-	fmt.Printf("\r[0/4] [🗸 ] Cleared TF-IDF table\n")
+	fmt.Printf("\r[0/4] [🗸 ] Cleared indices\n")
 
-	fmt.Printf("[1/4] [  ] Counting documents")
+	process()
 
 	documentCount, err := queries.GetDocumentCount(ctx)
 	if err != nil {
@@ -68,46 +75,63 @@ func main() {
 
 	fmt.Printf("\r[2/4] [🗸 ] Fetched token IDs\n")
 
-	tokensCount := len(tokens)
-	tokensCountStringLength := len(strconv.Itoa(tokensCount))
-	for i, id := range tokens {
-		fmt.Printf("\r[3/4] [%*d/%d] Computing TF-IDF", tokensCountStringLength, i, tokensCount)
-		df, err := queries.GetDocumentFrequencyByToken(ctx, id)
-		if err != nil {
-			fmt.Printf("\r[3/4] [✘ ] Failed to compute TF-IDF\n")
-		}
-		
-		if df <= 0 {
-			continue
-		}
+	// Parallel processing
+	numWorkers := runtime.NumCPU()
+	jobs := make(chan int64, numWorkers*2)
+	var wg sync.WaitGroup
 
-		idf := math.Log(float64(documentCount) / float64(df))
+	// Start worker pool
+	for range numWorkers {
+		wg.Go(func() {
+			for id := range jobs {
+				localCtx := context.Background()
+				
+				df, err := queries.GetDocumentFrequencyByToken(localCtx, id)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "\nFailed to compute DF for token %d: %v\n", id, err)
+					continue
+				}
+				
+				if df <= 0 {
+					continue
+				}
 
-		counts, err := queries.GetCountsForToken(ctx, id)
-		if err != nil {
-			fmt.Printf("\r[3/4] [✘ ] Failed to compute TF-IDF\n")
-			return
-		}
+				idf := math.Log(float64(documentCount) / float64(df))
 
-		for _, count := range counts {
-			tf := float64(count.Count)
-			tfidf := tf * idf
-			if tfidf < 0 {
-				tfidf = 0
+				counts, err := queries.GetCountsForToken(localCtx, id)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "\nFailed to compute counts for token %d: %v\n", id, err)
+					continue
+				}
+
+				for _, count := range counts {
+					tf := float64(count.Count)
+					tfidf := tf * idf
+					if tfidf < 0 {
+						tfidf = 0
+					}
+
+					err := queries.InsertTfIdfBatch(localCtx, db.InsertTfIdfBatchParams{
+						UrlID:		count.UrlID,
+						TokenID:	id,
+						TfIdf:		tfidf,
+					})
+					
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "\nFailed to insert for token ID %d: %v\n", id, err)
+					}
+				}
 			}
-
-			err := queries.InsertTfIdfBatch(ctx, db.InsertTfIdfBatchParams{
-				UrlID:		count.UrlID,
-				TokenID:	id,
-				TfIdf:		tfidf,
-			})
-			
-			if err != nil {
-				fmt.Printf("\r[3/4] [✘ ] Failed to compute TF-IDF\n")
-				return
-			}
-		}
+		})
 	}
+
+	// Send jobs
+	for _, id := range tokens {
+		jobs <- id
+	}
+	close(jobs)
+	wg.Wait()
+
 	fmt.Printf("\r[3/4] [🗸 ] Computed TF-IDF\n")
 	fmt.Printf("[4/4] [🗸 ] Completed post-processing\n")
 }
@@ -121,13 +145,17 @@ func process() {
 		return
 	}
 
-	embeddings_init()
+	if !tfidfOnly {
+		embeddings_init()
+	}
 
 	for _, row := range rows {
 		fmt.Printf("Processing URL ID: %d\n", row.UrlID)
 		// 2. Index
 		tfidf_add_token_index(ctx, row.UrlID, row.Content)
-		embeddings_add(ctx, row.UrlID, row.Content)
+		if !tfidfOnly {
+			embeddings_add(ctx, row.UrlID, row.Content)
+		}
 
 		// 3. Move to processed
 		err = queries.MoveToProcessed(ctx, row.UrlID)

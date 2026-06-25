@@ -123,8 +123,9 @@ func (q *Queries) GetTokenIDs(ctx context.Context) ([]int64, error) {
 }
 
 const getUnprocessedRawContent = `-- name: GetUnprocessedRawContent :many
-select url_id, content
-from raw_content
+select r.url_id, r.content
+from raw_content r
+where not exists (select 1 from processed_content p where p.url_id = r.url_id)
 `
 
 type GetUnprocessedRawContentRow struct {
