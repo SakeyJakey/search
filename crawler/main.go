@@ -190,6 +190,14 @@ func main() {
 	}
 	defer conn.Close()
 
+	fmt.Println("Clearing database...")
+	_, err = conn.Exec(context.Background(), "TRUNCATE TABLE urls RESTART IDENTITY CASCADE;")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to clear database: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Database cleared.")
+
 	queries = db.New(conn)
 
 	queue := &Queue[string] { }
