@@ -11,6 +11,40 @@ import (
 	"github.com/pgvector/pgvector-go"
 )
 
+const getEvaluationSummary = `-- name: GetEvaluationSummary :many
+SELECT search_type, 
+       COUNT(*) AS total, 
+       SUM(CASE WHEN is_relevant THEN 1 ELSE 0 END) AS relevant
+FROM evaluation_results
+GROUP BY search_type
+`
+
+type GetEvaluationSummaryRow struct {
+	SearchType string
+	Total      int64
+	Relevant   int64
+}
+
+func (q *Queries) GetEvaluationSummary(ctx context.Context) ([]GetEvaluationSummaryRow, error) {
+	rows, err := q.db.Query(ctx, getEvaluationSummary)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEvaluationSummaryRow
+	for rows.Next() {
+		var i GetEvaluationSummaryRow
+		if err := rows.Scan(&i.SearchType, &i.Total, &i.Relevant); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTokenIds = `-- name: GetTokenIds :one
 SELECT 
 	id,
@@ -26,17 +60,40 @@ func (q *Queries) GetTokenIds(ctx context.Context, token string) (TfIdfToken, er
 	return i, err
 }
 
+const saveEvaluation = `-- name: SaveEvaluation :exec
+INSERT INTO evaluation_results (query, url, search_type, is_relevant)
+VALUES ($1, $2, $3, $4)
+`
+
+type SaveEvaluationParams struct {
+	Query      string
+	Url        string
+	SearchType string
+	IsRelevant bool
+}
+
+func (q *Queries) SaveEvaluation(ctx context.Context, arg SaveEvaluationParams) error {
+	_, err := q.db.Exec(ctx, saveEvaluation,
+		arg.Query,
+		arg.Url,
+		arg.SearchType,
+		arg.IsRelevant,
+	)
+	return err
+}
+
 const tFIDFSearch = `-- name: TFIDFSearch :many
 SELECT
 	u.id,
 	u.url,
-	SUM(ti.tf_idf) AS relevance_score,
+	u.title,
+	SUM(ti.tf_idf)::double precision AS relevance_score,
 	COUNT(DISTINCT ti.token_id) AS matched_tokens
 FROM tf_idf_index ti
 JOIN urls u ON u.id = ti.url_id
 JOIN tf_idf_tokens t ON t.id = ti.token_id
 WHERE t.token = ANY($1::text[])
-GROUP BY u.id, u.url
+GROUP BY u.id, u.url, u.title
 ORDER BY relevance_score DESC, matched_tokens DESC
 LIMIT $2::int
 `
@@ -49,7 +106,8 @@ type TFIDFSearchParams struct {
 type TFIDFSearchRow struct {
 	ID             int64
 	Url            string
-	RelevanceScore int64
+	Title          string
+	RelevanceScore float64
 	MatchedTokens  int64
 }
 
@@ -66,6 +124,7 @@ func (q *Queries) TFIDFSearch(ctx context.Context, arg TFIDFSearchParams) ([]TFI
 		if err := rows.Scan(
 			&i.ID,
 			&i.Url,
+			&i.Title,
 			&i.RelevanceScore,
 			&i.MatchedTokens,
 		); err != nil {
@@ -82,8 +141,8 @@ func (q *Queries) TFIDFSearch(ctx context.Context, arg TFIDFSearchParams) ([]TFI
 const vectorSearch = `-- name: VectorSearch :many
 SELECT
 	u.id,
-	u.url
-	-- (1 - (vi.embedding <-> sqlc.arg('query_embedding')::vector)) AS similarity_score
+	u.url,
+	u.title
 FROM vector_index vi
 JOIN urls u ON u.id = vi.url_id
 WHERE vi.embedding IS NOT NULL
@@ -106,7 +165,7 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]U
 	var items []Url
 	for rows.Next() {
 		var i Url
-		if err := rows.Scan(&i.ID, &i.Url); err != nil {
+		if err := rows.Scan(&i.ID, &i.Url, &i.Title); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -115,20 +174,4 @@ func (q *Queries) VectorSearch(ctx context.Context, arg VectorSearchParams) ([]U
 		return nil, err
 	}
 	return items, nil
-}
-
-const saveEvaluation = `-- name: SaveEvaluation :exec
-INSERT INTO evaluation_results (query, search_type, score)
-VALUES ($1, $2, $3)
-`
-
-type SaveEvaluationParams struct {
-	Query      string
-	SearchType string
-	Score      int32
-}
-
-func (q *Queries) SaveEvaluation(ctx context.Context, arg SaveEvaluationParams) error {
-	_, err := q.db.Exec(ctx, saveEvaluation, arg.Query, arg.SearchType, arg.Score)
-	return err
 }

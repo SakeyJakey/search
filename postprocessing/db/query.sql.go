@@ -172,6 +172,12 @@ func (q *Queries) InsertTfIdfBatch(ctx context.Context, arg InsertTfIdfBatchPara
 	return err
 }
 
+type InsertTfIdfBulkParams struct {
+	UrlID   int64
+	TokenID int64
+	TfIdf   float64
+}
+
 const moveToProcessed = `-- name: MoveToProcessed :exec
 insert into processed_content (url_id, content)
 select r.url_id, r.content from raw_content r where r.url_id = $1

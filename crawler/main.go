@@ -74,12 +74,16 @@ func getTitle(doc *html.Node) string {
 	for node := doc.FirstChild; node != nil; node = node.NextSibling {
 		if node.Type == html.ElementNode {
 			if node.Data == "title" {
-				for child := node.FirstChild; child != nil; child = node.NextSibling {
+				for child := node.FirstChild; child != nil; child = child.NextSibling {
 					if child.Type == html.TextNode {
 						return child.Data
 					}
 				}
 			} else {
+
+
+
+
 				title := getTitle(node)
 				if title != "" {
 					return title 
@@ -103,7 +107,16 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 	done[seed] = true
 	doneMu.Unlock()
 
-	resp, err := http.Get(seed)
+	req, err := http.NewRequest("GET", seed, nil)
+	if err != nil {
+		stats.mu.Lock()
+		stats.dropped += 1
+		stats.mu.Unlock()
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3")
+
+	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
 		stats.mu.Lock()

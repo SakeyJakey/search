@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,7 +42,7 @@ func VectorSearch(ctx context.Context, query string, limit int) ([]SearchResult,
 	for i, r := range results {
 		searchResults[i] = SearchResult{
 			URL:   r.Url,
-			Title: "Vector",
+			Title: r.Title,
 		}
 	}
 
@@ -54,21 +55,22 @@ func TFIDFSearch(ctx context.Context, query string, limit int) ([]SearchResult, 
 		return []SearchResult{}, nil
 	}
 
-	tokenRecords := make([]int64, 0, len(tokens))
+	var validTokens []string
 	for _, token := range tokens {
-		tokenRow, err := queries.GetTokenIds(ctx, token)
+		_, err := queries.GetTokenIds(ctx, token)
 		if err != nil {
-			return nil, fmt.Errorf("token lookup failed: %w", err)
+			// Token doesn't exist, skip it
+			continue
 		}
-		tokenRecords = append(tokenRecords, tokenRow.ID)
+		validTokens = append(validTokens, token)
 	}
 
-	if len(tokenRecords) == 0 {
+	if len(validTokens) == 0 {
 		return []SearchResult{}, nil
 	}
 
 	results, err := queries.TFIDFSearch(ctx, db.TFIDFSearchParams{
-		Tokens: tokens,
+		Tokens: validTokens,
 		Limit:  int32(limit),
 	})
 	if err != nil {
@@ -79,18 +81,21 @@ func TFIDFSearch(ctx context.Context, query string, limit int) ([]SearchResult, 
 	for i, r := range results {
 		searchResults[i] = SearchResult{
 			URL:   r.Url,
-			Title: "TF-IDF",
+			Title: r.Title,
 		}
 	}
 
 	return searchResults, nil
 }
 
-func init() {
-	embeddings_init()
-}
-
 func main() {
+	noEmbeddings := flag.Bool("no-embeddings", false, "Disable loading embeddings")
+	flag.Parse()
+
+	if !*noEmbeddings {
+		embeddings_init()
+	}
+
 	connPool, err := pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
@@ -102,6 +107,7 @@ func main() {
 
 	http.HandleFunc("/api/search", handleSearchApi)
 	http.HandleFunc("/api/evaluate", handleEvaluateApi)
+	http.HandleFunc("/api/summary", handleSummaryApi)
 
 	log.Println("API Server running on :9091")
 	if err := http.ListenAndServe(":9091", nil); err != nil {
@@ -172,25 +178,50 @@ func handleEvaluateApi(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Query string `json:"query"`
-		Type  string `json:"type"`
-		Score int32  `json:"score"`
+		Query   string `json:"query"`
+		Results []struct {
+			URL        string `json:"url"`
+			Type       string `json:"type"`
+			IsRelevant bool   `json:"isRelevant"`
+		} `json:"results"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	err := queries.SaveEvaluation(r.Context(), db.SaveEvaluationParams{
-		Query:      req.Query,
-		SearchType: req.Type,
-		Score:      req.Score,
-	})
-	if err != nil {
-		log.Printf("Save evaluation error: %v", err)
-		http.Error(w, "Failed to save evaluation", http.StatusInternalServerError)
-		return
+	for _, res := range req.Results {
+		err := queries.SaveEvaluation(r.Context(), db.SaveEvaluationParams{
+			Query:      req.Query,
+			Url:        res.URL,
+			SearchType: res.Type,
+			IsRelevant: res.IsRelevant,
+		})
+		if err != nil {
+			log.Printf("Save evaluation error: %v", err)
+			http.Error(w, "Failed to save evaluation", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func handleSummaryApi(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	summary, err := queries.GetEvaluationSummary(r.Context())
+	if err != nil {
+		log.Printf("Summary error: %v", err)
+		http.Error(w, "Failed to get summary", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(summary)
 }

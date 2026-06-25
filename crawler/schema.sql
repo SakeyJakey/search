@@ -55,8 +55,9 @@ create table processed_content (
 create table evaluation_results (
 	id bigserial primary key,
 	query text not null,
+	url text not null,
 	search_type text not null,
-	score int not null check (score >= 0 and score <= 3),
+	is_relevant boolean not null,
 	created_at timestamp with time zone default current_timestamp
 );
 

@@ -1,9 +1,14 @@
 import React from "react";
+import { Link } from "wouter";
 import { SearchBar } from "@/components/SearchBar";
 
 export default function Home() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <nav className="absolute top-0 w-full p-6 flex justify-end gap-6 text-sm text-muted-foreground">
+        <Link href="/evaluate" className="hover:text-primary">Evaluate</Link>
+        <Link href="/summary" className="hover:text-primary">Summary</Link>
+      </nav>
       {/* Subtle background element */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03]" 
            style={{ backgroundImage: 'radial-gradient(var(--primary) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />

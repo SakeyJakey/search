@@ -49,7 +49,13 @@ func main() {
 		return
 	}
 
-	fmt.Printf("\r[0/4] [🗸 ] Cleared indices\n")
+	_, err = conn.Exec(ctx, "CREATE INDEX IF NOT EXISTS idx_tf_idf_counts_token_id ON tf_idf_counts(token_id);")
+	if err != nil {
+		fmt.Printf("\r[0/4] [✘ ] Failed to create index: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\r[0/4] [🗸 ] Cleared indices and updated\n")
 
 	process()
 
@@ -104,6 +110,13 @@ func main() {
 					continue
 				}
 
+				tx, err := conn.Begin(localCtx)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "\nFailed to begin transaction for token %d: %v\n", id, err)
+					continue
+				}
+				qtx := queries.WithTx(tx)
+
 				for _, count := range counts {
 					tf := float64(count.Count)
 					tfidf := tf * idf
@@ -111,7 +124,7 @@ func main() {
 						tfidf = 0
 					}
 
-					err := queries.InsertTfIdfBatch(localCtx, db.InsertTfIdfBatchParams{
+					err := qtx.InsertTfIdfBatch(localCtx, db.InsertTfIdfBatchParams{
 						UrlID:		count.UrlID,
 						TokenID:	id,
 						TfIdf:		tfidf,
@@ -121,6 +134,7 @@ func main() {
 						fmt.Fprintf(os.Stderr, "\nFailed to insert for token ID %d: %v\n", id, err)
 					}
 				}
+				tx.Commit(localCtx)
 			}
 		})
 	}

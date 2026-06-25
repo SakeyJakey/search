@@ -23,6 +23,10 @@ insert into tf_idf_index (
 	$1, $2, $3
 );
 
+-- name: InsertTfIdfBulk :copyfrom
+INSERT INTO tf_idf_index (url_id, token_id, tf_idf)
+VALUES ($1, $2, $3);
+
 -- name: GetUnprocessedRawContent :many
 select r.url_id, r.content
 from raw_content r

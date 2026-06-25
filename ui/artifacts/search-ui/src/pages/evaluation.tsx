@@ -7,114 +7,104 @@ import { Globe, ArrowRight } from "lucide-react";
 
 const QUERIES = ["search engine", "vector database", "tf-idf explanation", "go programming", "postgresql performance"];
 
-interface SearchResult {
-  name: string;
-  url: string;
+interface EvaluationResult extends SearchResult {
+  type: "vector" | "tfidf";
+  isRelevant: boolean;
 }
 
 export default function EvaluationPage() {
-  const [queryQueue, setQueryQueue] = useState<{query: string, type: "vector" | "tfidf"}[]>([]);
+  const [queriesList] = useState(QUERIES);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<EvaluationResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [score, setScore] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Shuffle queries and assign random type
-    const shuffled = [...QUERIES].sort(() => Math.random() - 0.5);
-    const queue = shuffled.map(q => ({
-      query: q,
-      type: Math.random() > 0.5 ? "vector" : "tfidf" as "vector" | "tfidf"
-    }));
-    setQueryQueue(queue);
-  }, []);
-
-  useEffect(() => {
-    if (queryQueue.length === 0 || currentIndex >= queryQueue.length) return;
+    if (currentIndex >= queriesList.length) return;
     
     setLoading(true);
     setResults([]);
     
-    // Fetch results
-    fetch("http://localhost:9091/api/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: queryQueue[currentIndex].query, type: queryQueue[currentIndex].type })
-    })
-      .then(res => res.json())
-      .then(data => {
-        setResults(data.map((r: any) => ({ name: r.title, url: r.url })).slice(0, 3));
-        setLoading(false);
-        setTimeout(() => inputRef.current?.focus(), 100);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, [currentIndex, queryQueue]);
+    const currentQuery = queriesList[currentIndex];
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const scoreVal = parseInt(score);
-    if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 3) return;
+    // Fetch both simultaneously
+    Promise.all([
+      fetch("http://localhost:9091/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: currentQuery, type: "vector" })
+      }).then(r => r.json()).then(data => data.map((r: any) => ({ ...r, type: "vector" as const }))),
+      fetch("http://localhost:9091/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: currentQuery, type: "tfidf" })
+      }).then(r => r.json()).then(data => data.map((r: any) => ({ ...r, type: "tfidf" as const })))
+    ]).then(([vectorRes, tfidfRes]) => {
+      // Take top 3 from each
+      const combined = [
+        ...vectorRes.slice(0, 3).map((r: any) => ({ name: r.title, url: r.url, type: r.type, isRelevant: false })),
+        ...tfidfRes.slice(0, 3).map((r: any) => ({ name: r.title, url: r.url, type: r.type, isRelevant: false }))
+      ];
+      // Shuffle
+      combined.sort(() => Math.random() - 0.5);
+      setResults(combined);
+      setLoading(false);
+    });
+  }, [currentIndex, queriesList]);
 
+  const toggleRelevant = (index: number) => {
+    setResults(prev => prev.map((r, i) => i === index ? { ...r, isRelevant: !r.isRelevant } : r));
+  };
+
+  const handleSubmit = () => {
     // Submit evaluation
     fetch("http://localhost:9091/api/evaluate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        query: queryQueue[currentIndex].query,
-        type: queryQueue[currentIndex].type,
-        score: scoreVal
+        query: queriesList[currentIndex],
+        results: results
       })
     }).then(() => {
-      setScore("");
       setCurrentIndex(prev => prev + 1);
     });
   };
 
-  if (currentIndex >= queryQueue.length && queryQueue.length > 0) {
+  if (currentIndex >= queriesList.length && queriesList.length > 0) {
     return <div className="p-10 text-center">Evaluation Complete!</div>;
   }
 
   return (
     <div className="min-h-screen container mx-auto p-10">
-      <h1 className="text-2xl mb-5">Evaluation: {currentIndex + 1} / {queryQueue.length}</h1>
-      <p className="text-lg mb-5 font-bold">Query: {queryQueue[currentIndex]?.query}</p>
+      <h1 className="text-2xl mb-5">Evaluation: {currentIndex + 1} / {queriesList.length}</h1>
+      <p className="text-lg mb-5 font-bold">Query: {queriesList[currentIndex]}</p>
       
       {loading ? (
-        <Skeleton className="h-40" />
+        <Skeleton className="h-60" />
       ) : (
         <div className="space-y-4 mb-5">
           {results.map((r, i) => (
-            <a 
-              key={i} 
-              href={r.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block p-3 border rounded hover:bg-muted/50 transition-colors"
-            >
-              <p className="font-medium text-primary hover:underline">{r.name}</p>
-              <p className="text-sm text-gray-500">{r.url}</p>
-            </a>
+            <div key={i} className="flex items-center gap-3 p-3 border rounded">
+              <input 
+                type="checkbox" 
+                checked={r.isRelevant} 
+                onChange={() => toggleRelevant(i)}
+                className="w-5 h-5"
+              />
+              <a 
+                href={r.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex-1"
+              >
+                <p className="font-medium text-primary hover:underline">{r.name}</p>
+                <p className="text-sm text-gray-500">{r.url}</p>
+              </a>
+            </div>
           ))}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Input 
-          ref={inputRef}
-          type="number" 
-          value={score} 
-          onChange={e => setScore(e.target.value)}
-          placeholder="Score (0-3)"
-          className="w-20"
-          min="0"
-          max="3"
-        />
-        <Button type="submit">Submit & Next</Button>
-      </form>
+      <Button onClick={handleSubmit}>Submit & Next</Button>
     </div>
   );
 }
