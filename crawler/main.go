@@ -32,6 +32,9 @@ type Statistics struct {
 var done = make(map[string]bool)
 var doneMu sync.Mutex
 var stats Statistics = Statistics{}
+var client = &http.Client{
+	Timeout: 5 * time.Second,
+}
 var conn *pgxpool.Pool
 var queries *db.Queries
 
@@ -116,7 +119,7 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 
 	if err != nil {
 		stats.mu.Lock()
@@ -175,8 +178,6 @@ func crawl(seed string, queue *Queue[string], wg *sync.WaitGroup) {
 		queue.Enqueue(seed)
 		return
 	}
-
-	wg.Done()
 }
 
 func main() {
@@ -222,12 +223,7 @@ func main() {
 	for range runtime.NumCPU() {
 		go func() {
 			for {
-				url, err := queue.Dequeue()
-
-				if err != nil {
-					break
-				}
-
+				url := queue.Dequeue()
 				crawl(url, queue, &wg)
 			}
 		}()
