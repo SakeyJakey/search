@@ -1,3 +1,10 @@
 crawler/crawler
 crawler/output.txt
 data/dolma_300_2024_1.2M.100_combined.txt
+Writeup.aux
+Writeup.fdb_latexmk
+Writeup.fls
+Writeup.log
+Writeup.out
+postprocessing/postprocessing
+api/api
