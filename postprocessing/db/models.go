@@ -12,8 +12,9 @@ import (
 type EvaluationResult struct {
 	ID         int64
 	Query      string
+	Url        string
 	SearchType string
-	Score      int32
+	IsRelevant bool
 	CreatedAt  pgtype.Timestamptz
 }
 

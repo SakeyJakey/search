@@ -7,7 +7,7 @@ import (
 	"math"
 	"os"
 	"runtime"
-	"sync"
+    "golang.org/x/sync/errgroup"
 
 	"postprocessing/db"
 
@@ -84,11 +84,11 @@ func main() {
 	// Parallel processing
 	numWorkers := runtime.NumCPU()
 	jobs := make(chan int64, numWorkers*2)
-	var wg sync.WaitGroup
+	g, ctx := errgroup.WithContext(context.Background())
 
 	// Start worker pool
 	for range numWorkers {
-		wg.Go(func() {
+		g.Go(func() error {
 			for id := range jobs {
 				localCtx := context.Background()
 				
@@ -136,6 +136,7 @@ func main() {
 				}
 				tx.Commit(localCtx)
 			}
+			return nil
 		})
 	}
 
@@ -144,7 +145,7 @@ func main() {
 		jobs <- id
 	}
 	close(jobs)
-	wg.Wait()
+	g.Wait()
 
 	fmt.Printf("\r[3/4] [🗸 ] Computed TF-IDF\n")
 	fmt.Printf("[4/4] [🗸 ] Completed post-processing\n")
@@ -152,36 +153,44 @@ func main() {
 
 func process() {
 	ctx := context.Background()
-	// 1. Get raw content
-	rows, err := queries.GetUnprocessedRawContent(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to get raw content: %v\n", err)
-		return
-	}
+	embeddings_init()
 
-	if !tfidfOnly {
-		embeddings_init()
-	}
+	batchSize := int32(1000)
 
-	for _, row := range rows {
-		fmt.Printf("Processing URL ID: %d\n", row.UrlID)
-		// 2. Index
-		tfidf_add_token_index(ctx, row.UrlID, row.Content)
-		if !tfidfOnly {
-			embeddings_add(ctx, row.UrlID, row.Content)
+	for {
+		rows, err := queries.GetUnprocessedRawContentBatch(ctx, db.GetUnprocessedRawContentBatchParams{
+			Limit:  batchSize,
+			Offset: 0,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get raw content batch: %v\n", err)
+			return
 		}
 
-		// 3. Move to processed
-		err = queries.MoveToProcessed(ctx, row.UrlID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to move to processed: %v\n", err)
-			continue
+		if len(rows) == 0 {
+			break
 		}
 
-		// 4. Delete from raw
-		err = queries.DeleteRawContent(ctx, row.UrlID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to delete from raw: %v\n", err)
+		for _, row := range rows {
+			fmt.Printf("Processing URL ID: %d\n", row.UrlID)
+			// 2. Index
+			tfidf_add_token_index(ctx, row.UrlID, row.Content)
+			if !tfidfOnly {
+				embeddings_add(ctx, row.UrlID, row.Content)
+			}
+
+			// 3. Move to processed
+			err = queries.MoveToProcessed(ctx, row.UrlID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to move to processed: %v\n", err)
+				continue
+			}
+
+			// 4. Delete from raw
+			err = queries.DeleteRawContent(ctx, row.UrlID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to delete from raw: %v\n", err)
+			}
 		}
 	}
 }

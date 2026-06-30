@@ -32,6 +32,12 @@ select r.url_id, r.content
 from raw_content r
 where not exists (select 1 from processed_content p where p.url_id = r.url_id);
 
+-- name: GetUnprocessedRawContentBatch :many
+select r.url_id, r.content
+from raw_content r
+where not exists (select 1 from processed_content p where p.url_id = r.url_id)
+limit $1 offset $2;
+
 -- name: MoveToProcessed :exec
 insert into processed_content (url_id, content)
 select r.url_id, r.content from raw_content r where r.url_id = $1;

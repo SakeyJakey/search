@@ -153,6 +153,43 @@ func (q *Queries) GetUnprocessedRawContent(ctx context.Context) ([]GetUnprocesse
 	return items, nil
 }
 
+const getUnprocessedRawContentBatch = `-- name: GetUnprocessedRawContentBatch :many
+select r.url_id, r.content
+from raw_content r
+where not exists (select 1 from processed_content p where p.url_id = r.url_id)
+limit $1 offset $2
+`
+
+type GetUnprocessedRawContentBatchParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type GetUnprocessedRawContentBatchRow struct {
+	UrlID   int64
+	Content string
+}
+
+func (q *Queries) GetUnprocessedRawContentBatch(ctx context.Context, arg GetUnprocessedRawContentBatchParams) ([]GetUnprocessedRawContentBatchRow, error) {
+	rows, err := q.db.Query(ctx, getUnprocessedRawContentBatch, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUnprocessedRawContentBatchRow
+	for rows.Next() {
+		var i GetUnprocessedRawContentBatchRow
+		if err := rows.Scan(&i.UrlID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertTfIdfBatch = `-- name: InsertTfIdfBatch :exec
 insert into tf_idf_index (
 	url_id, token_id, tf_idf
