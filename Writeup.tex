@@ -1,0 +1,72 @@
+\documentclass[12pt,a4paper]{article}
+
+% \usepackage[left=1.5cm,right=1.5cm,top=3cm,bottom=2cm]{geometry}
+% \usepackage{titling}
+% \setlength{\droptitle}{-3cm}
+% \linespread{0.8}
+
+\usepackage{savetrees}
+\usepackage[colorlinks=true, urlcolor=blue, linkcolor=red]{hyperref}
+
+\predate{}
+\postdate{}
+\date{}
+
+\title{Assessing the Relevance of Search Results Obtained Through TF-IDF
+Compared to Vector Embeddings}
+\author{***REMOVED***}
+
+\begin{document}
+\maketitle
+The aim of this project is to determine whether TF-IDF or vector search are
+better at finding relevant results for queries related to computing, technology
+and software. I chose this project as I have always wanted to try create a
+search engine and it seems like an interesting way to apply data science with my
+programming knowledge. For the data set, I created my own TF-IDF index and
+vector embeddings based on \href{https://nlp.stanford.edu/projects/glove/}{GloVe
+embeddings}. Although pre-trained indexes were likely available, I
+decided it would be best to implement everything myself to better understand the
+algorithms and methods used in vector and TF-IDF search. 
+
+I generated the indexes with my own crawler, using websites related to the
+topics as seeds. The crawler first saves the content of all the sites, then it
+indexes them by generating an average vector embedding and TF-IDF values from all of the
+words on the page. This data could be incomplete as some sites
+may have bot blockers. For the data wrangling, I made all the tokens lowercase
+and for the feature engineering, I converted the initial token counts to an
+actual TF-IDF index. For the analysis, I created a set of queries
+including ones that are challenging for both TF-IDF and vector search. Using these
+queries, I added a page dedicated to quick evaluation of each method's results which recorded the
+results to be presented after on a different page. For each query, I judged the
+top three results and recorded the number of them that were relevant. These
+results were later used for a per-category breakdown of where each method
+struggled and succeeded, as well as the overall success of it and other
+metrics. 
+
+
+Improvements: substituting stopwords
+
+Begin with the data generating process: what is the provenance of the data, how
+was it collected, what limitations are known to be present, and what was its
+structure at the project outset? Continue with data wrangling and feature
+engineering: what steps did you take to organize the data so it was suitable
+for analysis? Provide details of your analysis approach, including the type of
+problem, information about key outcome variables and features, the models used
+the address the question, strategies for training parameters and
+hyper-parameters, and the methods used to evaluate the performance of your
+approach. Present intermediate as well as final results, where appropriate.
+These might cover, for example, performance metrics during training, testing
+and validation, and deployment of the model to data with no known ground truth.
+Try to capture the main points using visualization tools like figures or
+tables. Explain results factually, with reference to concrete metrics, figures
+or tables. You may save interpretation of your results to the Discussion, or
+interpret them as you go with a combined Results and Discussion section.
+Interpret your results in the light of your original question, if you haven’t
+already done so. Discuss strengths and weaknesses, successes and failures of
+your project. Compare the execution to the project plan. What could have been
+improved, or what would you do differently if repeating the exercise? What
+challenges arose during the project, for example data deficiencies or biases
+that became apparent? What light does your project shed, if any, on the broader
+area? Reflect on the ethical, societal or practical implications of your
+findings. What future directions does it suggest?
+\end{document}
