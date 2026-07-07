@@ -55,9 +55,12 @@ create table processed_content (
 create table evaluation_results (
 	id bigserial primary key,
 	query text not null,
+	category text not null default 'uncategorized',
 	url text not null,
 	search_type text not null,
 	is_relevant boolean not null,
 	created_at timestamp with time zone default current_timestamp
 );
+
+-- create index if not exists idx_evaluation_summary on evaluation_results(search_type, category);
 

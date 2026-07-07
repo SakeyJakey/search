@@ -178,8 +178,9 @@ func handleEvaluateApi(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Query   string `json:"query"`
-		Results []struct {
+		Query    string `json:"query"`
+		Category string `json:"category"`
+		Results  []struct {
 			URL        string `json:"url"`
 			Type       string `json:"type"`
 			IsRelevant bool   `json:"isRelevant"`
@@ -193,6 +194,7 @@ func handleEvaluateApi(w http.ResponseWriter, r *http.Request) {
 	for _, res := range req.Results {
 		err := queries.SaveEvaluation(r.Context(), db.SaveEvaluationParams{
 			Query:      req.Query,
+			Category:   req.Category,
 			Url:        res.URL,
 			SearchType: res.Type,
 			IsRelevant: res.IsRelevant,

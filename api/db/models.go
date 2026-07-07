@@ -12,6 +12,7 @@ import (
 type EvaluationResult struct {
 	ID         int64
 	Query      string
+	Category   string
 	Url        string
 	SearchType string
 	IsRelevant bool

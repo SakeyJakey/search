@@ -54,6 +54,12 @@ func main() {
 		fmt.Printf("\r[0/4] [✘ ] Failed to create index: %v\n", err)
 		return
 	}
+	
+	_, err = conn.Exec(ctx, "CREATE INDEX IF NOT EXISTS idx_tf_idf_tokens_token ON tf_idf_tokens(token);")
+	if err != nil {
+		fmt.Printf("\r[0/4] [✘ ] Failed to create index: %v\n", err)
+		return
+	}
 
 	fmt.Printf("\r[0/4] [🗸 ] Cleared indices and updated\n")
 
@@ -148,6 +154,13 @@ func main() {
 	g.Wait()
 
 	fmt.Printf("\r[3/4] [🗸 ] Computed TF-IDF\n")
+	
+	_, err = conn.Exec(ctx, "CREATE INDEX IF NOT EXISTS idx_tfidf_optimized ON tf_idf_index(token_id, url_id, tf_idf);")
+	if err != nil {
+		fmt.Printf("\r[4/4] [✘ ] Failed to create optimized index: %v\n", err)
+		return
+	}
+
 	fmt.Printf("[4/4] [🗸 ] Completed post-processing\n")
 }
 

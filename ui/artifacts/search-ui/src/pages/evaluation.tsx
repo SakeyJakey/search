@@ -1,22 +1,33 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Link } from "wouter";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe, ArrowRight } from "lucide-react";
 
-const QUERIES = ["search engine", "vector database", "tf-idf explanation", "go programming", "postgresql performance"];
+const QUERIES = [
+  { q: "search engine", cat: "tech" },
+  { q: "vector database", cat: "tech" },
+  { q: "tf-idf explanation", cat: "tech" },
+  { q: "go programming", cat: "tech" },
+  { q: "postgresql performance", cat: "tech" }
+].sort((a, b) => a.cat.localeCompare(b.cat));
 
-interface EvaluationResult extends SearchResult {
+interface EvaluationResult {
+  name: string;
+  url: string;
   type: "vector" | "tfidf";
   isRelevant: boolean;
 }
 
+
 export default function EvaluationPage() {
-  const [queriesList] = useState(QUERIES);
+  const sortedQueries = React.useMemo(() => [...QUERIES].sort((a, b) => a.cat.localeCompare(b.cat)), []);
+  const [queriesList] = useState(sortedQueries);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [results, setResults] = useState<EvaluationResult[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const currentQuery = queriesList[currentIndex];
+  const categoryQueries = queriesList.filter(q => q.cat === currentQuery.cat);
+  const indexInCategory = categoryQueries.indexOf(currentQuery);
 
   useEffect(() => {
     if (currentIndex >= queriesList.length) return;
@@ -24,7 +35,7 @@ export default function EvaluationPage() {
     setLoading(true);
     setResults([]);
     
-    const currentQuery = queriesList[currentIndex];
+    const currentQuery = queriesList[currentIndex].q;
 
     // Fetch both simultaneously
     Promise.all([
@@ -61,7 +72,8 @@ export default function EvaluationPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        query: queriesList[currentIndex],
+        query: queriesList[currentIndex].q,
+        category: queriesList[currentIndex].cat,
         results: results
       })
     }).then(() => {
@@ -76,7 +88,12 @@ export default function EvaluationPage() {
   return (
     <div className="min-h-screen container mx-auto p-10">
       <h1 className="text-2xl mb-5">Evaluation: {currentIndex + 1} / {queriesList.length}</h1>
-      <p className="text-lg mb-5 font-bold">Query: {queriesList[currentIndex]}</p>
+      <div className="flex gap-2 mb-5 items-center">
+        <p className="text-lg font-bold">Category: {currentQuery.cat} ({indexInCategory + 1} / {categoryQueries.length})</p>
+      </div>
+      <div className="flex gap-2 mb-5">
+        <p className="text-lg font-bold">Query: {currentQuery.q}</p>
+      </div>
       
       {loading ? (
         <Skeleton className="h-60" />
