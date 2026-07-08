@@ -37,15 +37,21 @@ export default function SummaryPage() {
     return entry;
   });
 
-  const volumeChartData = categories.map(cat => {
-    const catData = data.filter(d => d.Category === cat);
-    const entry: any = { category: cat };
-    catData.forEach(d => {
-      entry[`${d.SearchType}_Total`] = d.Total;
-      entry[`${d.SearchType}_Relevant`] = d.Relevant;
-    });
-    return entry;
-  });
+  // Calculate total precision
+  const totalPrecision = data.reduce((acc, d) => {
+    if (!acc[d.SearchType]) acc[d.SearchType] = { Total: 0, Relevant: 0 };
+    acc[d.SearchType].Total += d.Total;
+    acc[d.SearchType].Relevant += d.Relevant;
+    return acc;
+  }, {} as Record<string, { Total: number, Relevant: number }>);
+
+  const totalPrecisionChartData = Object.entries(totalPrecision).map(([type, vals]) => ({
+    type,
+    precision: vals.Total > 0 ? (vals.Relevant / vals.Total) * 100 : 0
+  }));
+
+  // Helper to get fill color
+  const getFillColor = (type: string) => type === 'tfidf' ? '#82ca9d' : '#8884d8';
 
   return (
     <div className="min-h-screen container mx-auto p-10">
@@ -71,18 +77,18 @@ export default function SummaryPage() {
         </div>
 
         <div className="h-80 border rounded p-4">
-          <h2 className="text-xl mb-4">Query Volume by Category</h2>
+          <h2 className="text-xl mb-4">Total Precision (%)</h2>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={volumeChartData}>
+            <BarChart data={totalPrecisionChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="category" />
+              <XAxis dataKey="type" />
               <YAxis />
               <Tooltip />
-              <Legend />
-              <Bar dataKey="vector_Total" fill="#8884d8" name="Vector Total" />
-              <Bar dataKey="vector_Relevant" fill="#8884d8" name="Vector Relevant" />
-              <Bar dataKey="tfidf_Total" fill="#82ca9d" name="TF-IDF Total" />
-              <Bar dataKey="tfidf_Relevant" fill="#82ca9d" name="TF-IDF Relevant" />
+              {/* Removed Legend */}
+              <Bar dataKey="precision" name="Precision (%)" shape={(props: any) => {
+                  const { x, y, width, height, payload } = props;
+                  return <rect x={x} y={y} width={width} height={height} fill={getFillColor(payload.type)} />;
+              }} />
             </BarChart>
           </ResponsiveContainer>
         </div>

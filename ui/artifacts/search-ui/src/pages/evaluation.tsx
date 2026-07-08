@@ -3,11 +3,68 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const QUERIES = [
-  { q: "search engine", cat: "tech" },
-  { q: "vector database", cat: "tech" },
-  { q: "tf-idf explanation", cat: "tech" },
-  { q: "go programming", cat: "tech" },
-  { q: "postgresql performance", cat: "tech" }
+  /* broad */
+  { q: "news", 						cat: "broad" },
+  { q: "crypto", 					cat: "broad" },
+  { q: "github", 					cat: "broad" },
+  { q: "finance", 					cat: "broad" },
+  { q: "privacy", 					cat: "broad" },
+  { q: "security", 					cat: "broad" },
+  { q: "AI", 						cat: "broad" },
+  { q: "electic cars",					cat: "broad" },
+  { q: "sustainability",				cat: "broad" },
+  { q: "education",					cat: "broad" },
+
+  /* tricky */
+  { q: "speedy programmer languages", 			cat: "tf-idf" },
+  { q: "internet threat protection", 			cat: "tf-idf" },
+  { q: "stratospheric orbital object", 			cat: "tf-idf" },
+  { q: "folding internet device", 			cat: "tf-idf" },
+  { q: "advice for fast website loading", 		cat: "tf-idf" },
+  { q: "B.A.S.I.C language",				cat: "vector" },
+  { q: "non-blocking getchar", 				cat: "vector" },
+  { q: "plasma desktop", 				cat: "vector" },
+  { q: "bash shell", 					cat: "vector" },
+  { q: "python", 					cat: "vector" },
+
+  /* specific */
+  { q: "minimal tiling window managers for X11",	cat: "specific" },
+  { q: "linux distros without systemd",			cat: "specific" },
+  { q: "bitcoin live market cap",			cat: "specific" },
+  { q: "boeing new fighter jet",			cat: "specific" },
+  { q: "postresql join example",			cat: "specific" },
+  { q: "youtube downloader online",			cat: "specific" },
+  { q: "best value gpus for gaming",			cat: "specific" },
+  { q: "best laptops for productivity",			cat: "specific" },
+  { q: "macbook pro m4 for sale",			cat: "specific" },
+  { q: "how to configure nginx",			cat: "specific" },
+
+  /* comparisons */
+  { q: "go vs rust for speed",				cat: "comparisons" },
+  { q: "c vs c++ for jobs",				cat: "comparisons" },
+  { q: "react vs sveltve for webdev",			cat: "comparisons" },
+  { q: "intel vs amd cpus",				cat: "comparisons" },
+  { q: "nvidia vs amd gpus",				cat: "comparisons" },
+  { q: "X11 vs wayland performance",			cat: "comparisons" },
+  { q: "truenas vs unraid",				cat: "comparisons" },
+  { q: "openbsd vs freebsd",				cat: "comparisons" },
+  { q: "postgresql vs mysql",				cat: "comparisons" },
+  { q: "android vs ios",				cat: "comparisons" },
+
+  /* errors */
+  { q: "C segmentation fault",				cat: "errors" },
+  { q: "grub-install efi variables are not supported",	cat: "errors" },
+  { q: "react hooks can only be called error",		cat: "errors" },
+  { q: "git merge conflict",				cat: "errors" },
+  { q: "linux kernel compile error 2",			cat: "errors" },
+
+  /* companies */
+  { q: "google", 					cat: "broad" },
+  { q: "microsoft", 					cat: "broad" },
+  { q: "NASA", 						cat: "broad" },
+  { q: "amazon", 					cat: "broad" },
+  { q: "xiaomi", 					cat: "broad" },
+
 ].sort((a, b) => a.cat.localeCompare(b.cat));
 
 interface EvaluationResult {
@@ -89,10 +146,10 @@ export default function EvaluationPage() {
     <div className="min-h-screen container mx-auto p-10">
       <h1 className="text-2xl mb-5">Evaluation: {currentIndex + 1} / {queriesList.length}</h1>
       <div className="flex gap-2 mb-5 items-center">
-        <p className="text-lg font-bold">Category: {currentQuery.cat} ({indexInCategory + 1} / {categoryQueries.length})</p>
+        <p className="text-lg font-bold">Category: {currentQuery.cat||""} ({indexInCategory + 1} / {categoryQueries.length})</p>
       </div>
       <div className="flex gap-2 mb-5">
-        <p className="text-lg font-bold">Query: {currentQuery.q}</p>
+        <p className="text-lg font-bold">Query: {currentQuery.q||""}</p>
       </div>
       
       {loading ? (
